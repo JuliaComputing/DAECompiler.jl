@@ -11,13 +11,14 @@ using OrdinaryDiffEq
 #= Basic IPO: We need to read the incidence of the contained `-` =#
 @noinline function onecall!()
     x = continuous()
+    initial!(x - 1.0)
     always!(ddt(x) - x)
 end
 
 onecall!()
-sol = solve(DAECProblem(onecall!, (1,) .=> 1.), IDA())
+sol = solve(DAECProblem(onecall!), DFBDF(autodiff=false))
 @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[1, :], exp.(sol.t)))
-sol = solve(ODECProblem(onecall!, (1,) .=> 1.), Rodas5(autodiff=false))
+sol = solve(ODECProblem(onecall!), Rodas5(autodiff=false))
 @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[1, :], exp.(sol.t)))
 
 #==== Contained Equations ============#
@@ -27,8 +28,8 @@ function twocall!()
 end
 
 twocall!()
-dae_sol = solve(DAECProblem(twocall!, (1, 2) .=> 1.), IDA())
-ode_sol = solve(ODECProblem(twocall!, (1, 2) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(twocall!), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(twocall!), Rodas5(autodiff=false))
 for (sol, i) in Iterators.product((dae_sol, ode_sol), 1:2)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[i, :], exp.(sol.t)))
 end
@@ -36,14 +37,15 @@ end
 #============== NonLinear ============#
 @noinline function sin!()
     x = continuous()
+    initial!(x - 1.0)
     always!(ddt(x) - sin(x))
 end
 function sin2!()
     sin!(); sin!();
     return nothing
 end
-dae_sol = solve(DAECProblem(sin2!, (1, 2) .=> 1.), IDA())
-ode_sol = solve(ODECProblem(sin2!, (1, 2) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(sin2!), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(sin2!), Rodas5(autodiff=false))
 for (sol, i) in Iterators.product((dae_sol, ode_sol), 1:2)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[i, :], 2*acot.(exp.(-sol.t).*cot(1/2))))
 end
@@ -52,10 +54,11 @@ end
 @noinline sink!(x, v) = always!(x - v)
 function sinsink!()
     x = continuous()
+    initial!(x - 1.0)
     sink!(ddt(x), sin(x))
 end
-dae_sol = solve(DAECProblem(sinsink!, (1,) .=> 1.), IDA())
-ode_sol = solve(ODECProblem(sinsink!, (1,) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(sinsink!), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(sinsink!), Rodas5(autodiff=false))
 for sol in (dae_sol, ode_sol)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[1, :], 2*acot.(exp.(-sol.t).*cot(1/2))))
 end
@@ -66,7 +69,7 @@ function sinsink2!()
     x = continuous()
     sink2!(x, sin(x))
 end
-dae_sol = solve(DAECProblem(sinsink2!, (1,) .=> 1.), IDA())
+dae_sol = solve(DAECProblem(sinsink2!, (1,) .=> 1.), DFBDF(autodiff=false))
 ode_sol = solve(ODECProblem(sinsink2!, (1,) .=> 1.), Rodas5(autodiff=false))
 for sol in (dae_sol, ode_sol)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[1, :], 2*acot.(exp.(-sol.t).*cot(1/2))))
@@ -91,7 +94,7 @@ function (this::sicm2!)()
     sicm!(this.a)(); sicm!(this.b)();
     return nothing
 end
-dae_sol = solve(DAECProblem(sicm2!(1., 1.), (1, 2) .=> 1.), IDA())
+dae_sol = solve(DAECProblem(sicm2!(1., 1.), (1, 2) .=> 1.), DFBDF(autodiff=false))
 ode_sol = solve(ODECProblem(sicm2!(1., 1.), (1, 2) .=> 1.), Rodas5(autodiff=false))
 for (sol, i) in Iterators.product((dae_sol, ode_sol), 1:2)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[i, :], 1. .+ sol.t))
@@ -104,6 +107,7 @@ end
 
 @noinline function (this::nlsicm!)()
     x = continuous()
+    initial!(x - 1.0)
     always!(ddt(x) - sin(this.arg))
 end
 
@@ -116,8 +120,8 @@ function (this::nlsicm2!)()
     nlsicm!(this.a)(); nlsicm!(this.b)();
     return nothing
 end
-dae_sol = solve(DAECProblem(nlsicm2!(1., 1.), (1, 2) .=> 1.), IDA())
-ode_sol = solve(ODECProblem(nlsicm2!(1., 1.), (1, 2) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(nlsicm2!(1., 1.)), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(nlsicm2!(1., 1.)), Rodas5(autodiff=false))
 for (sol, i) in Iterators.product((dae_sol, ode_sol), 1:2)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[i, :], 1. .+ sin(1.)*sol.t))
 end

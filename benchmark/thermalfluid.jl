@@ -103,6 +103,7 @@ function (this::CircularWall{Ne, Nn})(inner_heatport, outer_heatport) where {Ne,
     Qe = ntuple(_->continuous(), Ne)
 
     ntuple(i->initial!(Tn[i] - this.T0), Nn)
+    ntuple(i->initial!(Qe[i] - this.T0), Ne)
 
     dn = (this.d, (this.d .+ 2.0 .* cumsum(this.t_layer))...)
     Cni = Cn_circular_wall_inner.(dn[1:Ne], dn[2:Nn], this.cp, this.ρ)
