@@ -307,7 +307,7 @@ function compute_eq_schedule(key::TornCacheKey, total_incidence, result, mss::St
                 caller_vars_for_this_callee_var = rowvals(caller_map.row) .- 1
                 if length(caller_vars_for_this_callee_var) == 1
                     caller_var = only(caller_vars_for_this_callee_var)
-                    if (caller_var in key.diff_states || caller_var in key.alg_states) &&
+                    if ((key.diff_states !== nothing && caller_var in key.diff_states) || caller_var in key.alg_states) &&
                        varclassification(result, structure, caller_var) == CalleeInternal
                         continue
                     end
@@ -698,6 +698,69 @@ function StateSelection.MatchedSystemStructure(result::DAEIPOResult, structure, 
     StateSelection.MatchedSystemStructure(structure, var_eq_matching, StateSelection.SSAUses(result))
 end
 
+function project_mapping(state::TransformationState, info::MappingInfo, key::TornCacheKey, var_eq_matching::StateSelection.Matching, total_incidence; callee_var_schedule = nothing)
+    (; diff_states, alg_states, var_schedule) = key
+
+    callee_diff_vars = BitSet()
+    callee_alg_vars = BitSet()
+    callee_param_vars = BitSet()
+    callee_explicit_eqs = BitSet()
+    externally_solved_vars = BitSet()
+
+    callee_result = (info::MappingInfo).result
+
+    for callee_var = 1:length(callee_result.var_to_diff)
+        caller_map = info.mapping.var_coeffs[callee_var]
+        if isa(caller_map, Const)
+            push!(callee_param_vars, callee_var)
+        else
+            if varclassification(callee_result, callee_var) == External
+                if all(x->(x in key.param_vars), rowvals(caller_map.row) .- 1)
+                    push!(callee_param_vars, callee_var)
+                end
+                continue
+            end
+            caller_var = only(rowvals(caller_map.row))-1
+            if diff_states !== nothing && caller_var in diff_states
+                push!(callee_diff_vars, callee_var)
+            elseif caller_var in alg_states
+                push!(callee_alg_vars, callee_var)
+            elseif caller_var in key.param_vars
+                push!(callee_param_vars, callee_var)
+            end
+            eq = var_eq_matching[caller_var]
+        end
+    end
+
+    for (callee_eq, caller_eq) in enumerate(info.mapping.eqs)
+        caller_eq == 0 && continue
+        if caller_eq in key.explicit_eqs && eqclassification(state, caller_eq) == CalleeInternal
+            push!(callee_explicit_eqs, callee_eq)
+        else
+            var = invview(var_eq_matching)[caller_eq]
+            (!isassigned(callee_result.total_incidence, callee_eq) ||
+                is_const_plus_var_known_linear(callee_result.total_incidence[callee_eq]) ||
+                !isassigned(total_incidence, caller_eq) ||
+                is_const_plus_var_known_linear(total_incidence[caller_eq])) && continue
+            @assert var !== unassigned
+            if callee_var_schedule !== nothing && !any(out->callee_eq in out[2], callee_var_schedule)
+                display(mss)
+                cstructure = make_structure_from_ipo(callee_result)
+                cvar_eq_matching = matching_for_key(callee_result, callee_key)
+                display(StateSelection.MatchedSystemStructure(callee_result, cstructure, cvar_eq_matching))
+                @sshow eq_orders
+                @sshow callee_result.total_incidence[callee_eq]
+                @sshow total_incidence[caller_eq]
+                @sshow callee_var_schedule
+                error("Caller Equation $(caller_eq) (callee equation $(callee_eq)) is not in the callee schedule ($sref)")
+            end
+        end
+    end
+
+    return TornCacheKey(callee_diff_vars, callee_alg_vars, callee_param_vars, callee_explicit_eqs,
+        callee_var_schedule === nothing ? Vector{Pair{BitSet, BitSet}}() : callee_var_schedule)
+end
+
 function tearing_schedule!(state::TransformationState, ci::CodeInstance, key::TornCacheKey, world::UInt, settings::Settings)
     result_ci = find_matching_ci(ci->isa(ci.owner, SICMSpec) && ci.owner.key == key, ci.def, world)
     if result_ci !== nothing
@@ -790,71 +853,15 @@ function tearing_schedule!(state::TransformationState, ci::CodeInstance, key::To
                 push!(processed_variables, varnum)
             elseif isexpr(stmt, :invoke)
                 # Project the state mapping
-                callee_diff_vars = BitSet()
-                callee_alg_vars = BitSet()
-                callee_param_vars = BitSet()
-                callee_explicit_eqs = BitSet()
-                externally_solved_vars = BitSet()
-
                 info = inst[:info]
                 isa(info, MappingInfo) || continue
 
-                callee_result = (info::MappingInfo).result
-
-                for callee_var = 1:length(callee_result.var_to_diff)
-                    caller_map = info.mapping.var_coeffs[callee_var]
-                    if isa(caller_map, Const)
-                        push!(callee_param_vars, callee_var)
-                    else
-                        if varclassification(callee_result, callee_var) == External
-                            if all(x->(x in key.param_vars), rowvals(caller_map.row) .- 1)
-                                push!(callee_param_vars, callee_var)
-                            end
-                            continue
-                        end
-                        caller_var = only(rowvals(caller_map.row))-1
-                        if caller_var in diff_states
-                            push!(callee_diff_vars, callee_var)
-                        elseif caller_var in alg_states
-                            push!(callee_alg_vars, callee_var)
-                        elseif caller_var in key.param_vars
-                            push!(callee_param_vars, callee_var)
-                        end
-                        eq = var_eq_matching[caller_var]
-                    end
-                end
-
                 sref = stmt.args[1][1]
                 callee_var_schedule = get!(callee_schedules, sref, Vector{Pair{BitSet, BitSet}}())
-                callee_key = TornCacheKey(callee_diff_vars, callee_alg_vars, callee_param_vars, callee_explicit_eqs, callee_var_schedule)
                 callee_position_map[sref] = SSAValue(i)
+                callee_key = project_mapping(state, info, key, var_eq_matching, total_incidence; callee_var_schedule)
 
-                for (callee_eq, caller_eq) in enumerate(info.mapping.eqs)
-                    caller_eq == 0 && continue
-                    if caller_eq in key.explicit_eqs && eqclassification(state, caller_eq) == CalleeInternal
-                        push!(callee_explicit_eqs, callee_eq)
-                    else
-                        var = invview(var_eq_matching)[caller_eq]
-                        (!isassigned(callee_result.total_incidence, callee_eq) ||
-                         is_const_plus_var_known_linear(callee_result.total_incidence[callee_eq]) ||
-                         !isassigned(total_incidence, caller_eq) ||
-                         is_const_plus_var_known_linear(total_incidence[caller_eq])) && continue
-                        @assert var !== unassigned
-                        if !any(out->callee_eq in out[2], callee_var_schedule)
-                            display(mss)
-                            cstructure = make_structure_from_ipo(callee_result)
-                            cvar_eq_matching = matching_for_key(callee_result, callee_key)
-                            display(StateSelection.MatchedSystemStructure(callee_result, cstructure, cvar_eq_matching))
-                            @sshow eq_orders
-                            @sshow callee_result.total_incidence[callee_eq]
-                            @sshow total_incidence[caller_eq]
-                            @sshow callee_var_schedule
-                            error("Caller Equation $(caller_eq) (callee equation $(callee_eq)) is not in the callee schedule ($sref)")
-                        end
-                    end
-                end
-
-                if !isempty(callee_explicit_eqs)
+                if !isempty(callee_key.explicit_eqs)
                     vars_for_final = BitSet()
                     # TODO: This is a very expensive way to compute this - we should be able to do this cheaper
                     cstructure = make_structure_from_ipo(callee_result)
@@ -893,7 +900,7 @@ function tearing_schedule!(state::TransformationState, ci::CodeInstance, key::To
                     new_stmt.args[1] = callee_sicm_ci
 
                     in_param_vars = Expr(:call, tuple)
-                    for var in callee_param_vars
+                    for var in callee_key.param_vars
                         varmap = info.mapping.var_coeffs[var]
                         nonlin = nothing
                         if !is_const_plus_var_known_linear(varmap)

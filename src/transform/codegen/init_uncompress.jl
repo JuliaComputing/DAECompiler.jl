@@ -39,8 +39,10 @@ function gen_init_uncompress!(
     rhs_ms = nothing
     old_daef_mi = nothing
     assigned_slots = falses(length(result.total_incidence))
+    diff_var_eq_matching = matching_for_key(state, diff_key)
 
-    (_, diff_slots, _) = assign_slots(state, diff_key, nothing)
+    (diff_slot_assignments, diff_var_assignment, diff_eq_assignment) = assign_slots(state, diff_key, diff_var_eq_matching)
+
 
     cis = Vector{CodeInstance}()
     for (ir_ordinal, ir) in enumerate(torn.ir_seq)
@@ -82,7 +84,6 @@ function gen_init_uncompress!(
             end
 
             if isexpr(stmt, :invoke) && isa(stmt.args[1], Tuple)
-                error() # TODO: Adjust this to init - current is DAE RHS
                 info::MappingInfo
                 callee_ci = stmt.args[1][1]
                 closure_env = stmt.args[2]
@@ -94,10 +95,11 @@ function gen_init_uncompress!(
                 @assert callee_ci !== nothing
 
                 spec_data = stmt.args[1]
-                callee_key = stmt.args[1][2]
+                callee_init_key = stmt.args[1][2]
+                callee_diff_key = project_mapping(state, info, diff_key, diff_var_eq_matching, state.total_incidence)
                 callee_ordinal = stmt.args[1][end]::Int
                 callee_result = structural_analysis!(callee_ci, world, settings)
-                callee_daef_ci = rhs_finish!(callee_result, callee_ci, callee_key, world, settings, callee_ordinal)
+                callee_daef_ci = gen_init_uncompress!(callee_result, callee_ci, callee_init_key, callee_diff_key, world, settings, callee_ordinal)
                 # Allocate a continuous block of variables for all callee alg and diff states
 
                 empty!(stmt.args)
@@ -106,12 +108,16 @@ function gen_init_uncompress!(
                 push!(stmt.args, in_vars)
 
                 # Ordering from tearing is (AssignedDiff, UnassignedDiff, Algebraic, Explicit)
-                for (arg, range_idx) in zip(arg_range, (1, 4, 1, 2, 2, 3))
+                slot_ranges = compute_slot_ranges(state, info, callee_diff_key, diff_var_assignment, diff_eq_assignment)
+                for (arg, range) in zip(arg_range, slot_ranges)
                     push!(stmt.args, insert_node!(ir, SSAValue(i),
                         NewInstruction(inst;
-                        stmt=Expr(:call, view, Argument(arg), spec_data[2+range_idx]),
+                        stmt=Expr(:call, view, Argument(arg), range),
                         type=VectorViewType)))
                 end
+
+                # TODO: Needs to subset
+                push!(stmt.args, in_nlsolve_u)
 
                 # TODO: Track whether the system is autonomous
                 push!(stmt.args, t)
@@ -128,7 +134,7 @@ function gen_init_uncompress!(
                 ir[SSAValue(i)][:inst] = Intrinsics.placeholder_equation
             elseif is_solved_variable(stmt)
                 (varnum, argval) = stmt.args[(end-1):end]
-                slot = diff_slots[varnum]
+                slot = diff_var_assignment[varnum]
                 if slot === nothing
                     ir[SSAValue(i)] = nothing
                 else
