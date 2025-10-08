@@ -861,6 +861,12 @@ function tearing_schedule!(state::TransformationState, ci::CodeInstance, key::To
                 callee_position_map[sref] = SSAValue(i)
                 callee_key = project_mapping(state, info, key, var_eq_matching, total_incidence; callee_var_schedule)
 
+                callee_codeinst = stmt.args[1][2]
+                if isa(callee_codeinst, MethodInstance)
+                    callee_codeinst = Compiler.get(Compiler.code_cache(interp), callee_codeinst, nothing)
+                end
+                callee_result = structural_analysis!(callee_codeinst, world, settings)
+
                 if !isempty(callee_key.explicit_eqs)
                     vars_for_final = BitSet()
                     # TODO: This is a very expensive way to compute this - we should be able to do this cheaper
@@ -883,11 +889,6 @@ function tearing_schedule!(state::TransformationState, ci::CodeInstance, key::To
                     continue
                 end
 
-                callee_codeinst = stmt.args[1][2]
-                if isa(callee_codeinst, MethodInstance)
-                    callee_codeinst = Compiler.get(Compiler.code_cache(interp), callee_codeinst, nothing)
-                end
-                callee_result = structural_analysis!(callee_codeinst, world, settings)
                 callee_sicm_ci = tearing_schedule!(callee_result, callee_codeinst, callee_key, world, settings)
 
                 inst[:type] = Any
