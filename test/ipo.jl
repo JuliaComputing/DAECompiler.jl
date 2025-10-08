@@ -67,10 +67,11 @@ end
 @noinline sink2!(x, v) = always!(ddt(x) - v)
 function sinsink2!()
     x = continuous()
+    initial!(x - 1.0)
     sink2!(x, sin(x))
 end
-dae_sol = solve(DAECProblem(sinsink2!, (1,) .=> 1.), DFBDF(autodiff=false))
-ode_sol = solve(ODECProblem(sinsink2!, (1,) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(sinsink2!), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(sinsink2!), Rodas5(autodiff=false))
 for sol in (dae_sol, ode_sol)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[1, :], 2*acot.(exp.(-sol.t).*cot(1/2))))
 end
@@ -82,6 +83,7 @@ end
 
 @noinline function (this::sicm!)()
     x = continuous()
+    initial!(x - 1.0)
     always!(ddt(x) - this.arg)
 end
 
@@ -94,8 +96,8 @@ function (this::sicm2!)()
     sicm!(this.a)(); sicm!(this.b)();
     return nothing
 end
-dae_sol = solve(DAECProblem(sicm2!(1., 1.), (1, 2) .=> 1.), DFBDF(autodiff=false))
-ode_sol = solve(ODECProblem(sicm2!(1., 1.), (1, 2) .=> 1.), Rodas5(autodiff=false))
+dae_sol = solve(DAECProblem(sicm2!(1., 1.)), DFBDF(autodiff=false))
+ode_sol = solve(ODECProblem(sicm2!(1., 1.)), Rodas5(autodiff=false))
 for (sol, i) in Iterators.product((dae_sol, ode_sol), 1:2)
     @test all(map((x,y)->isapprox(x[], y, atol=1e-2), sol[i, :], 1. .+ sol.t))
 end
