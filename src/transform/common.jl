@@ -98,6 +98,44 @@ function cache_dae_ci!(old_ci, src, debuginfo, abi, owner; rettype=Tuple)
     return daef_ci
 end
 
+function optimized_opaque_closure(ir::IRCode, world::UInt; slotnames = nothing)
+    oc = Core.OpaqueClosure(ir)
+    adjust_world_bounds!(oc)
+    optimized_oc = optimize_opaque_closure!(oc, world; slotnames)
+    adjust_world_bounds!(optimized_oc)
+    return optimized_oc
+end
+
+function optimize_opaque_closure!(oc::Core.OpaqueClosure, world::UInt; slotnames = nothing)
+    method = oc.source
+    ci = method.specializations.cache
+    ir = reinfer_and_inline(ci, world)
+    return Core.OpaqueClosure(ir; slotnames)
+end
+
+# Not sure if/why this is necessary or even correct, but
+# otherwise the `CodeInstance` bounds are outdated.
+function adjust_world_bounds!(oc::Core.OpaqueClosure)
+    ci = oc.source.specializations.cache
+    @atomic ci.min_world = ci.inferred.min_world
+    @atomic ci.max_world = ci.inferred.max_world
+end
+
+function reinfer_and_inline(ci::CodeInstance, world::UInt)
+    interp = Compiler.NativeInterpreter(world)
+    mi = Compiler.get_ci_mi(ci)
+    argtypes = collect(Any, mi.specTypes.parameters)
+    irsv = Compiler.IRInterpretationState(interp, ci, mi, argtypes, world)
+    @assert irsv !== nothing
+    for stmt in irsv.ir.stmts
+        stmt[:flag] |= Compiler.IR_FLAG_REFINED
+    end
+    Compiler.ir_abstract_constant_propagation(interp, irsv)
+    state = Compiler.InliningState(interp)
+    ir = Compiler.ssa_inlining_pass!(irsv.ir, state, Compiler.propagate_inbounds(irsv))
+    return ir
+end
+
 function replace_call!(ir::Union{IRCode,IncrementalCompact}, idx::SSAValue, @nospecialize(new_call), settings::Settings, source)
     replace_call!(ir, idx, new_call)
     settings.insert_stmt_debuginfo || return new_call

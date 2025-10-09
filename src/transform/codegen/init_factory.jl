@@ -88,7 +88,7 @@ function init_uncompress_gen!(compact::Compiler.IncrementalCompact, result::DAEI
     @insert_instruction_here(oc_compact, line, settings, (return out_arr)::Vector{Float64})
 
     ir_oc = Compiler.finish(oc_compact)
-    oc = Core.OpaqueClosure(ir_oc)
+    oc = optimized_opaque_closure(ir_oc, world)
 
     line = result.ir[SSAValue(1)][:line]
 

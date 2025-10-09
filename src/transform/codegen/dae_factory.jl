@@ -45,7 +45,7 @@ end
 
 const SCIML_ABI = Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, SciMLBase.NullParameters, Float64}
 
-function sciml_to_internal_abi!(ir::IRCode, state::TransformationState, internal_ci::CodeInstance, key::TornCacheKey, var_eq_matching, settings::Settings)
+function sciml_to_internal_abi!(ir::IRCode, state::TransformationState, internal_ci::CodeInstance, key::TornCacheKey, var_eq_matching, world::UInt, settings::Settings)
     (; result, structure) = state
 
     numstates = zeros(Int, Int(LastEquationStateKind))
@@ -111,12 +111,7 @@ function sciml_to_internal_abi!(ir::IRCode, state::TransformationState, internal
     resize!(ir.cfg.blocks, 1)
     empty!(ir.cfg.blocks[1].succs)
     Compiler.verify_ir(ir)
-
-    @async @eval Main begin
-        interface_ir = $ir
-    end
-
-    return Core.OpaqueClosure(ir; slotnames = [:captures, :out, :du, :u, :p, :t])
+    return optimized_opaque_closure(ir, world; slotnames = [:captures, :out, :du, :u, :p, :t])
 end
 
 """
@@ -173,7 +168,7 @@ function dae_factory_gen(state::TransformationState, ci::CodeInstance, key::Unio
         end
 
         daef_ci = rhs_finish!(state, ci, key, world, settings, 1)
-        oc = sciml_to_internal_abi!(copy(ci.inferred.ir), state, daef_ci, key, var_eq_matching, settings)
+        oc = sciml_to_internal_abi!(copy(ci.inferred.ir), state, daef_ci, key, var_eq_matching, world, settings)
     end
 
     line = result.ir[SSAValue(1)][:line]

@@ -139,7 +139,7 @@ function ode_factory_gen(state::TransformationState, ci::CodeInstance, key::Torn
     interface_ir = Compiler.finish(interface_ic)
     maybe_rewrite_debuginfo!(interface_ir, settings)
     Compiler.verify_ir(interface_ir)
-    interface_oc = Core.OpaqueClosure(interface_ir; slotnames = [:self, :du, :u, :p, :t])
+    interface_oc = optimized_opaque_closure(interface_ir, world; slotnames = [:self, :du, :u, :p, :t])
 
     line = result.ir[SSAValue(1)][:line]
 
