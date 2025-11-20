@@ -39,18 +39,19 @@ StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 Sundials = "c3572dad-4567-51f8-b174-8c6c989267f4"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-Tracy = "e689c965-62c8-4b79-b2c5-8359227902fd"
 
 [weakdeps]
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
 
 [sources]
 Compiler = {rev = "master", url = "https://github.com/JuliaLang/BaseCompiler.jl.git"}
-Cthulhu = {rev = "master", url = "https://github.com/JuliaDebug/Cthulhu.jl.git"}
 DifferentiationInterface = {rev = "main", subdir = "DifferentiationInterface", url = "https://github.com/Keno/DifferentiationInterface.jl"}
-Diffractor = {rev = "main", url = "https://github.com/JuliaDiff/Diffractor.jl.git"}
+Diffractor = {rev = "cthulhu", url = "https://github.com/JuliaDiff/Diffractor.jl.git"}
 SimpleNonlinearSolve = {rev = "master", subdir = "lib/SimpleNonlinearSolve", url = "https://github.com/SciML/NonlinearSolve.jl.git"}
 StateSelection = {rev = "main", url = "https://github.com/JuliaComputing/StateSelection.jl.git"}
+
+[extensions]
+DAECompilerCthulhuExt = ["Compiler", "Cthulhu"]
 
 [compat]
 Accessors = "0.1.36"
@@ -59,9 +60,9 @@ CentralizedCaches = "1.1.0"
 ChainRules = "1.50"
 ChainRulesCore = "1.20"
 Compiler = "0"
+Cthulhu = "3.0.0"
 DiffEqBase = "6.149.2"
-DifferentiationInterface = "0.6.52"
-Diffractor = "0.2.7"
+DifferentiationInterface = "0.7.9"
 ForwardDiff = "0.10.36"
 InteractiveUtils = "1.11.0"
 NonlinearSolve = "3.5.0, 4"
@@ -69,7 +70,6 @@ OrderedCollections = "1.6.3"
 PrecompileTools = "1"
 Preferences = "1.4"
 SciMLBase = "2.86.2"
-SimpleNonlinearSolve = "2.3.0"
 StateSelection = "0.2.0"
 StaticArraysCore = "1.4.2"
 Sundials = "4.19"

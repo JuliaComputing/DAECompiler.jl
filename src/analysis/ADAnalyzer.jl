@@ -85,7 +85,7 @@ end
     return AnalyzedSource(ir, slotnames, Compiler.compute_inlining_cost(interp, result), result.src.src.nargs, result.src.src.isva)
 end
 
-@override function Compiler.transform_result_for_local_cache(interp::ADAnalyzer, result::InferenceResult)
+@override function Compiler.transform_result_for_local_cache(interp::ADAnalyzer, result::InferenceResult, edges::SimpleVector)
     if Compiler.result_is_constabi(interp, result)
         return nothing
     end

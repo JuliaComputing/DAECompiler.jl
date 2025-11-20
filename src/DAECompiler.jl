@@ -43,4 +43,6 @@ module DAECompiler
     include("analysis/consistency.jl")
     include("interface.jl")
     include("problem_interface.jl")
+
+    export dae_provider # use with Cthulhu, `@descend provider=dae_provider() pingpong()`
 end

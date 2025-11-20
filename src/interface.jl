@@ -113,3 +113,6 @@ function refresh()
     return nothing
 end
 refresh()
+
+# methods are to be added via the Cthulhu extension
+function dae_provider end

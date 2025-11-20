@@ -32,22 +32,7 @@ function code_structure_by_type(@nospecialize(tt::Type); world::UInt = Base.tls_
   _result = structural_analysis!(ci, world, settings)
   isa(_result, UncompilableIPOResult) && throw(_result.error)
   !matched && return result ? _result : _result.ir
-  result = _result
-
-  structure = make_structure_from_ipo(result)
-
-  tstate = TransformationState(result, structure)
-  err = StateSelection.check_consistency(tstate, nothing)
-  err !== nothing && throw(err)
-
-  ret = top_level_state_selection!(tstate)
-  isa(ret, UncompilableIPOResult) && throw(ret.error)
-
-  (diff_key, init_key) = ret
-  key = in(mode, (DAE, DAENoInit, ODE, ODENoInit)) ? diff_key : init_key
-
-  var_eq_matching = matching_for_key(tstate, key)
-  return StateSelection.MatchedSystemStructure(result, structure, var_eq_matching)
+  return matched_system_structure(_result, mode)
 end
 
 """

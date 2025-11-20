@@ -115,3 +115,20 @@ function make_structure_from_ipo(ipo::DAEIPOResult)
 
     structure = DAESystemStructure(StateSelection.complete(var_to_diff), StateSelection.complete(eq_to_diff), graph, solvable_graph)
 end
+
+function matched_system_structure(result::DAEIPOResult, mode)
+  structure = make_structure_from_ipo(result)
+
+  tstate = TransformationState(result, structure)
+  err = StateSelection.check_consistency(tstate, nothing)
+  err !== nothing && throw(err)
+
+  ret = top_level_state_selection!(tstate)
+  isa(ret, UncompilableIPOResult) && throw(ret.error)
+
+  (diff_key, init_key) = ret
+  key = in(mode, (DAE, DAENoInit, ODE, ODENoInit)) ? diff_key : init_key
+
+  var_eq_matching = matching_for_key(tstate, key)
+  return StateSelection.MatchedSystemStructure(result, structure, var_eq_matching)
+end
